@@ -12,7 +12,7 @@ import ReactFlow, {
   EdgeLabelRenderer,
   getBezierPath,
 } from "reactflow";
-import type { Edge, EdgeProps, Node, ReactFlowInstance } from "reactflow";
+import type { Edge, EdgeProps, Node as RFNode, ReactFlowInstance } from "reactflow";
 import "reactflow/dist/style.css";
 
 /**
@@ -25,6 +25,7 @@ import "reactflow/dist/style.css";
 
 // ---------------- Types ----------------
 interface NodeSnapshot { id: string; x: number; y: number; label: string }
+type NodeData = { label: string; value?: number; max?: number };
 interface EdgeSnapshot { id: string; source: string; target: string; polarity: "+" | "-"; delayed?: boolean }
 interface TimelineFrame { date: string; nodes: NodeSnapshot[]; edges: EdgeSnapshot[] }
 
@@ -235,12 +236,12 @@ const DEFAULT_EDGE_OPTIONS = { type: 'circular', style: { strokeWidth: 1.8 }, ma
 // Componente interactivo (Play / Pause / Slider / Velocidad)
 // ==========================================================
 export default function CLDInteractiveHardcoded() {
-  const reactFlowRef = useRef<ReactFlowInstance | null>(null);
+  const reactFlowRef = useRef<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [rf, setRf] = useState<ReactFlowInstance | null>(null);
   const frames = HARD_FRAMES;
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode<NodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -268,7 +269,7 @@ export default function CLDInteractiveHardcoded() {
     setNodes(f.nodes.map((n) => ({
       id: n.id,
       position: { x: n.x * scale, y: n.y * scale },
-      data: { label: n.label, value: undefined, max: MAX_HINT[n.id] },
+      data: { label: n.label, value: undefined, max: MAX_HINT[n.id] } as NodeData,
       type: CYLINDER_IDS.has(n.id) ? "tank" : "default",
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -318,10 +319,10 @@ export default function CLDInteractiveHardcoded() {
   // actualizar labels y altura de tanques por frame
   useEffect(() => {
     const f = frames[frameIdx];
-    setNodes((prev: Node[]) => prev.map((n: Node) => {
+    setNodes((prev: RFNode<NodeData>[]) => prev.map((n: RFNode<NodeData>) => {
       const snap = f.nodes.find((s) => s.id === n.id)!;
       const rawValue = SERIES[frameIdx].v[n.id];
-      let nextData: { label: string; value?: number; max?: number } = { label: snap.label };
+      let nextData: NodeData = { label: snap.label };
       if (CYLINDER_IDS.has(n.id)) {
         const min = SERIES_MIN[n.id] ?? 0;
         const max = SERIES_MAX[n.id] ?? 1;
@@ -340,7 +341,7 @@ export default function CLDInteractiveHardcoded() {
   }, [frameIdx, frames, setNodes, setEdges]);
 
   const onScrub = (idx: number) => setFrameIdx(idx);
-  const onNodeClick = (_: React.MouseEvent, node: Node) => {
+  const onNodeClick = (_: React.MouseEvent, node: RFNode<NodeData>) => {
     if (CYLINDER_IDS.has(node.id)) {
       setSelectedVarId(node.id);
     }
@@ -396,7 +397,7 @@ export default function CLDInteractiveHardcoded() {
           zoomOnScroll={true}
           panOnScroll={true}
           panOnScrollSpeed={0.8}
-          panOnScrollMode="free"
+          
           zoomOnPinch={true}
           zoomOnDoubleClick={true}
           proOptions={{ hideAttribution: true }}
@@ -404,7 +405,7 @@ export default function CLDInteractiveHardcoded() {
           edgeTypes={EDGE_TYPES}
           nodeTypes={NODE_TYPES}
         >
-          <Background variant="dots" gap={18} size={1} color={COLORS.grid} />
+          <Background gap={18} size={1} color={COLORS.grid} />
           <MiniMap pannable zoomable />
           <Controls showInteractive={false} />
         </ReactFlow>
