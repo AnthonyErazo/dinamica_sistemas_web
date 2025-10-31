@@ -241,7 +241,7 @@ export default function CLDInteractiveHardcoded() {
   const [rf, setRf] = useState<ReactFlowInstance | null>(null);
   const frames = HARD_FRAMES;
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode<NodeData>>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState([] as RFNode<NodeData>[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(true);
