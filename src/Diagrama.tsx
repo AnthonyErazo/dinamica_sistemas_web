@@ -245,6 +245,7 @@ export default function CLDInteractiveHardcoded() {
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
+  const [selectedVarId, setSelectedVarId] = useState<string | null>(null);
 
   const toggleFullscreen = async () => {
     const el = wrapperRef.current;
@@ -339,6 +340,11 @@ export default function CLDInteractiveHardcoded() {
   }, [frameIdx, frames, setNodes, setEdges]);
 
   const onScrub = (idx: number) => setFrameIdx(idx);
+  const onNodeClick = (_: React.MouseEvent, node: Node) => {
+    if (CYLINDER_IDS.has(node.id)) {
+      setSelectedVarId(node.id);
+    }
+  };
 
   return (
     <div ref={wrapperRef} style={{ width: "100%", height: "100vh", display: "grid", gridTemplateRows: "auto auto 200px 1fr", gap: 8, background: COLORS.bg }}>
@@ -367,8 +373,8 @@ export default function CLDInteractiveHardcoded() {
         <input type="range" min={0} max={frames.length - 1} step={1} value={frameIdx} onChange={(e) => onScrub(Number(e.target.value))} style={{ width: "100%" }} />
       </div>
 
-      {/* Mini chart */}
-      <MiniChart frameIdx={frameIdx} series={SERIES} />
+      {/* Mini chart sincronizado con selección de tanque */}
+      <MiniChart frameIdx={frameIdx} series={SERIES} selectedVarId={selectedVarId} />
 
       {/* Diagram */}
       <div style={{ width: "100%", height: "100%", border: `1px solid ${COLORS.grid}`, borderRadius: 12, overflow: "hidden", background: COLORS.card }}>
@@ -379,6 +385,7 @@ export default function CLDInteractiveHardcoded() {
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChange}
+          onNodeClick={onNodeClick}
           onEdgesChange={onEdgesChange}
           fitView
           panOnDrag={true}
@@ -407,20 +414,16 @@ export default function CLDInteractiveHardcoded() {
 }
 
 // ================== MiniChart Component (hardcoded, like Wikipedia curves) ==================
-function MiniChart({ frameIdx, series }: { frameIdx: number; series: Array<{ date: string; v: Record<string, number> }> }) {
-  const VARS = [
-    { id: "poblacion_inm", name: "Población inmigrante", color: COLORS.nodeBlue },
-    { id: "delinc_calle", name: "Delincuentes en la calle", color: COLORS.nodeTeal },
-  ];
+function MiniChart({ frameIdx, series, selectedVarId }: { frameIdx: number; series: Array<{ date: string; v: Record<string, number> }>; selectedVarId: string | null }) {
+  const VAR_META: Record<string, { name: string; color: string }> = {
+    poblacion_inm: { name: "Población inmigrante", color: COLORS.nodeBlue },
+    desempleados: { name: "Inmigrantes Desempleados", color: COLORS.nodeRed },
+    delinc_calle: { name: "Delincuentes en la calle", color: COLORS.nodeTeal },
+    policias_serv: { name: "Policías en Servicio", color: COLORS.nodeBlue },
+  };
   const w = 900, h = 180, pad = 40;
-  const allX = series.map((_, i) => i);
   const xMin = 0, xMax = series.length - 1;
-  const yValues = VARS.flatMap(v => series.map(s => s.v[v.id] ?? 0));
-  const yMin = Math.min(...yValues);
-  const yMax = Math.max(...yValues);
   const X = (i: number) => pad + (i - xMin) / (xMax - xMin || 1) * (w - pad * 2);
-  const Y = (y: number) => h - pad - (y - yMin) / (yMax - yMin || 1) * (h - pad * 2);
-  const pathFor = (id: string) => series.map((s, i) => `${i === 0 ? "M" : "L"} ${X(i)},${Y(s.v[id] ?? 0)}`).join(" ");
 
   return (
     <div style={{ padding: "6px 10px", width: "100%", maxWidth: "100vh", margin: "0 auto" }}>
@@ -428,22 +431,37 @@ function MiniChart({ frameIdx, series }: { frameIdx: number; series: Array<{ dat
         {/* axes */}
         <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke={COLORS.axis} strokeWidth={1} />
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke={COLORS.axis} strokeWidth={1} />
-        {/* grid */}
-        {allX.map((i) => <line key={i} x1={X(i)} y1={pad} x2={X(i)} y2={h - pad} stroke={COLORS.grid} strokeWidth={0.5} />)}
-        {/* lines + marker */}
-        {VARS.map(v => (
-          <g key={v.id}>
-            <path d={pathFor(v.id)} fill="none" stroke={v.color} strokeWidth={2.5} />
-            <circle cx={X(frameIdx)} cy={Y(series[frameIdx].v[v.id] ?? 0)} r={4} fill={v.color} />
-          </g>
-        ))}
-        {/* legend */}
-        {VARS.map((v, idx) => (
-          <g key={v.id} transform={`translate(${w - pad - 220}, ${pad + idx * 18})`}>
-            <rect width="12" height="12" fill={v.color} />
-            <text x="18" y="10" fill={COLORS.text} fontSize="12">{v.name}</text>
-          </g>
-        ))}
+        {/* contenido según selección */}
+        {selectedVarId ? (
+          (() => {
+            const ys = series.map(s => s.v[selectedVarId] ?? 0);
+            const yMin = Math.min(...ys);
+            const yMax = Math.max(...ys);
+            const Y = (y: number) => h - pad - (y - yMin) / (yMax - yMin || 1) * (h - pad * 2);
+            const color = VAR_META[selectedVarId]?.color ?? COLORS.nodeTeal;
+            const name = VAR_META[selectedVarId]?.name ?? selectedVarId;
+            const pathFull = series.map((s, i) => `${i === 0 ? "M" : "L"} ${X(i)},${Y(s.v[selectedVarId] ?? 0)}`).join(" ");
+            const pathProg = series.slice(0, Math.max(1, frameIdx + 1)).map((s, i) => `${i === 0 ? "M" : "L"} ${X(i)},${Y(s.v[selectedVarId] ?? 0)}`).join(" ");
+            return (
+              <g>
+                {/* grid vertical */}
+                {series.map((_, i) => <line key={i} x1={X(i)} y1={pad} x2={X(i)} y2={h - pad} stroke={COLORS.grid} strokeWidth={0.5} />)}
+                {/* línea tenue completa (referencia) */}
+                <path d={pathFull} fill="none" stroke={COLORS.axis} strokeOpacity={0.25} strokeWidth={2} />
+                {/* línea progresiva hasta frame actual */}
+                <path d={pathProg} fill="none" stroke={color} strokeWidth={2.5} />
+                <circle cx={X(frameIdx)} cy={Y(series[frameIdx].v[selectedVarId] ?? 0)} r={5} fill={COLORS.pos} />
+                {/* leyenda */}
+                <g transform={`translate(${w - pad - 260}, ${pad})`}>
+                  <rect width="12" height="12" fill={color} />
+                  <text x="18" y="10" fill={COLORS.text} fontSize="12">{name}</text>
+                </g>
+              </g>
+            );
+          })()
+        ) : (
+          <text x={pad + 8} y={pad + 12} fill={COLORS.axis} fontSize="12">Selecciona un tanque para ver su serie temporal…</text>
+        )}
       </svg>
     </div>
   );
